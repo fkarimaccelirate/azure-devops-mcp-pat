@@ -146,6 +146,7 @@ Alternatively, you can set the PAT using an environment variable:
 ```
 
 To create a PAT:
+
 1. Navigate to your Azure DevOps organization
 2. Click on User Settings → Personal Access Tokens
 3. Click "New Token" and select appropriate scopes

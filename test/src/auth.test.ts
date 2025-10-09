@@ -27,9 +27,9 @@ describe("createAuthenticator", () => {
     it("should return PAT when using pat authentication type", async () => {
       const testPat = "test-pat-token-12345";
       const authenticator = createAuthenticator("pat", undefined, testPat);
-      
+
       const token = await authenticator();
-      
+
       expect(token).toBe(testPat);
     });
 
@@ -48,9 +48,9 @@ describe("createAuthenticator", () => {
     it("should work with long PAT tokens", async () => {
       const longPat = "a".repeat(500);
       const authenticator = createAuthenticator("pat", undefined, longPat);
-      
+
       const token = await authenticator();
-      
+
       expect(token).toBe(longPat);
     });
   });

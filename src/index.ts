@@ -93,10 +93,10 @@ async function main() {
     userAgentComposer.appendMcpClientInfo(server.server.getClientVersion());
   };
   const tenantId = (await getOrgTenant(orgName)) ?? argv.tenant;
-  
+
   // Get PAT from command line argument or environment variable
   const pat = argv.pat || process.env.AZURE_DEVOPS_PAT;
-  
+
   const authenticator = createAuthenticator(argv.authentication, tenantId, pat);
 
   // removing prompts untill further notice
