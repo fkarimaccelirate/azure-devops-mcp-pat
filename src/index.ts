@@ -44,14 +44,19 @@ const argv = yargs(hideBin(process.argv))
   })
   .option("authentication", {
     alias: "a",
-    describe: "Type of authentication to use. Supported values are 'interactive', 'azcli' and 'env' (default: 'interactive')",
+    describe: "Type of authentication to use. Supported values are 'interactive', 'azcli', 'env' and 'pat' (default: 'interactive')",
     type: "string",
-    choices: ["interactive", "azcli", "env"],
+    choices: ["interactive", "azcli", "env", "pat"],
     default: defaultAuthenticationType,
   })
   .option("tenant", {
     alias: "t",
     describe: "Azure tenant ID (optional, applied when using 'interactive' and 'azcli' type of authentication)",
+    type: "string",
+  })
+  .option("pat", {
+    alias: "p",
+    describe: "Personal Access Token (required when using 'pat' authentication). Can also be set via AZURE_DEVOPS_PAT environment variable",
     type: "string",
   })
   .help()
@@ -63,10 +68,11 @@ const orgUrl = "https://dev.azure.com/" + orgName;
 const domainsManager = new DomainsManager(argv.domains);
 export const enabledDomains = domainsManager.getEnabledDomains();
 
-function getAzureDevOpsClient(getAzureDevOpsToken: () => Promise<string>, userAgentComposer: UserAgentComposer): () => Promise<azdev.WebApi> {
+function getAzureDevOpsClient(getAzureDevOpsToken: () => Promise<string>, userAgentComposer: UserAgentComposer, authType: string): () => Promise<azdev.WebApi> {
   return async () => {
     const accessToken = await getAzureDevOpsToken();
-    const authHandler = azdev.getBearerHandler(accessToken);
+    // Use PAT handler for PAT authentication, Bearer handler for OAuth/Azure CLI
+    const authHandler = authType === "pat" ? azdev.getPersonalAccessTokenHandler(accessToken) : azdev.getBearerHandler(accessToken);
     const connection = new azdev.WebApi(orgUrl, authHandler, undefined, {
       productName: "AzureDevOps.MCP",
       productVersion: packageVersion,
@@ -87,12 +93,16 @@ async function main() {
     userAgentComposer.appendMcpClientInfo(server.server.getClientVersion());
   };
   const tenantId = (await getOrgTenant(orgName)) ?? argv.tenant;
-  const authenticator = createAuthenticator(argv.authentication, tenantId);
+  
+  // Get PAT from command line argument or environment variable
+  const pat = argv.pat || process.env.AZURE_DEVOPS_PAT;
+  
+  const authenticator = createAuthenticator(argv.authentication, tenantId, pat);
 
   // removing prompts untill further notice
   // configurePrompts(server);
 
-  configureAllTools(server, authenticator, getAzureDevOpsClient(authenticator, userAgentComposer), () => userAgentComposer.userAgent, enabledDomains);
+  configureAllTools(server, authenticator, getAzureDevOpsClient(authenticator, userAgentComposer, argv.authentication), () => userAgentComposer.userAgent, enabledDomains);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
