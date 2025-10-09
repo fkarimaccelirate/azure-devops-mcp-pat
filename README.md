@@ -228,6 +228,16 @@ Open GitHub Copilot Chat and try a prompt like `List ADO projects`. The first ti
 > 💥 We strongly recommend creating a `.github\copilot-instructions.md` in your project. This will enhance your experience using the Azure DevOps MCP Server with GitHub Copilot Chat.
 > To start, just include "`This project uses Azure DevOps. Always check to see if the Azure DevOps MCP server has a tool relevant to the user's request`" in your copilot instructions file.
 
+### 🔐 Authentication Options
+
+The Azure DevOps MCP Server supports multiple authentication methods:
+
+- **Interactive OAuth** (default): Opens a browser for Microsoft account login
+- **Personal Access Token (PAT)**: Use a PAT for authentication - great for automation and service accounts
+- **Azure CLI**: Use your existing Azure CLI login
+
+To use PAT authentication, add `--authentication pat --pat YOUR_TOKEN` to the args in your `mcp.json`, or use the `AZURE_DEVOPS_PAT` environment variable. See the [getting started documentation](./docs/GETTINGSTARTED.md#-authentication-options) for detailed examples.
+
 See the [getting started documentation](./docs/GETTINGSTARTED.md) to use our MCP Server with other tools such as Visual Studio 2022, Claude Code, and Cursor.
 
 ## 🌏 Using Domains

@@ -108,6 +108,97 @@ Try using Azure login context instead:
 
 3. **Restart VS Code** completely to ensure the MCP server picks up the new configuration.
 
+### Using Personal Access Token (PAT)
+
+If you prefer to use a Personal Access Token for authentication, you can configure the MCP server to use PAT authentication. This is useful when OAuth or Azure CLI is not available, or when you need to use a service account.
+
+#### Steps
+
+1. **Create a Personal Access Token** in Azure DevOps:
+   - Navigate to your Azure DevOps organization
+   - Click on User Settings (top right) → Personal Access Tokens
+   - Click "New Token"
+   - Give it a name and select appropriate scopes (e.g., "Full access" for testing)
+   - Copy the token value (you won't be able to see it again!)
+
+2. **Configure the MCP server** with the PAT authentication option by updating your `.vscode/mcp.json`.
+
+   **Option 1: Using environment variable (Recommended for security)**
+
+   ```json
+   {
+     "inputs": [
+       {
+         "id": "ado_org",
+         "type": "promptString",
+         "description": "Azure DevOps organization name (e.g. 'contoso')"
+       }
+     ],
+     "servers": {
+       "ado": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--authentication", "pat"],
+         "env": {
+           "AZURE_DEVOPS_PAT": "your-pat-token-here"
+         }
+       }
+     }
+   }
+   ```
+
+   **Option 2: Using command line argument (Less secure)**
+
+   ```json
+   {
+     "inputs": [
+       {
+         "id": "ado_org",
+         "type": "promptString",
+         "description": "Azure DevOps organization name (e.g. 'contoso')"
+       }
+     ],
+     "servers": {
+       "ado": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--authentication", "pat", "--pat", "your-pat-token-here"]
+       }
+     }
+   }
+   ```
+
+   **Option 3: Using input variable for PAT**
+
+   ```json
+   {
+     "inputs": [
+       {
+         "id": "ado_org",
+         "type": "promptString",
+         "description": "Azure DevOps organization name (e.g. 'contoso')"
+       },
+       {
+         "id": "ado_pat",
+         "type": "promptString",
+         "description": "Azure DevOps Personal Access Token",
+         "password": true
+       }
+     ],
+     "servers": {
+       "ado": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--authentication", "pat", "--pat", "${input:ado_pat}"]
+       }
+     }
+   }
+   ```
+
+3. **Restart VS Code** completely to ensure the MCP server picks up the new configuration.
+
+> ⚠️ **Security Note**: When using PAT authentication, be careful not to commit your token to source control. Use environment variables or secure storage for production scenarios.
+
 ### Multi-Tenant Authentication Problems when using azcli
 
 If you encounter authentication errors like `TF400813: The user 'xxx' is not authorized to access this resource`, you may be experiencing multi-tenant authentication issues.

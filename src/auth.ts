@@ -50,8 +50,16 @@ class OAuthAuthenticator {
   }
 }
 
-function createAuthenticator(type: string, tenantId?: string): () => Promise<string> {
+function createAuthenticator(type: string, tenantId?: string, pat?: string): () => Promise<string> {
   switch (type) {
+    case "pat":
+      if (!pat) {
+        throw new Error("PAT (Personal Access Token) is required when using 'pat' authentication type.");
+      }
+      return async () => {
+        return pat;
+      };
+
     case "azcli":
     case "env":
       if (type !== "env") {

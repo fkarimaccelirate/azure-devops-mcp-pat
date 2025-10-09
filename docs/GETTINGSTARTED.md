@@ -88,6 +88,95 @@ Click "Select Tools" and choose the available tools.
 3. The server appears in the tools list.
 4. Try prompts like "List ADO projects".
 
+#### 🔐 Authentication Options
+
+The Azure DevOps MCP Server supports multiple authentication methods. By default, it uses interactive OAuth authentication, but you can configure it to use other methods:
+
+##### Personal Access Token (PAT)
+
+To use PAT authentication, update your `.vscode/mcp.json` file:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps organization name  (e.g. 'contoso')"
+    },
+    {
+      "id": "ado_pat",
+      "type": "promptString",
+      "description": "Azure DevOps Personal Access Token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "ado": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--authentication", "pat", "--pat", "${input:ado_pat}"]
+    }
+  }
+}
+```
+
+Alternatively, you can set the PAT using an environment variable:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps organization name  (e.g. 'contoso')"
+    }
+  ],
+  "servers": {
+    "ado": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--authentication", "pat"],
+      "env": {
+        "AZURE_DEVOPS_PAT": "your-pat-token-here"
+      }
+    }
+  }
+}
+```
+
+To create a PAT:
+
+1. Navigate to your Azure DevOps organization
+2. Click on User Settings → Personal Access Tokens
+3. Click "New Token" and select appropriate scopes
+4. Copy the token value
+
+##### Azure CLI Authentication
+
+To use Azure CLI authentication, ensure you're logged in with `az login`, then update your `.vscode/mcp.json`:
+
+```json
+{
+  "inputs": [
+    {
+      "id": "ado_org",
+      "type": "promptString",
+      "description": "Azure DevOps organization name  (e.g. 'contoso')"
+    }
+  ],
+  "servers": {
+    "ado": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "${input:ado_org}", "--authentication", "azcli"]
+    }
+  }
+}
+```
+
+For more authentication troubleshooting, see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md#authentication-issues).
+
 #### 🛠️ Install from Source (Dev Mode)
 
 This installation method is recommended for advanced users and contributors who want immediate access to the latest updates from the main branch. It is ideal if you are developing new tools, enhancing existing features, or maintaining a custom fork.
