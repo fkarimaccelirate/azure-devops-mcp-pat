@@ -81,8 +81,7 @@ Interact with these Azure DevOps services:
 ### 📁 Repositories
 
 - **repo_list_repos_by_project**: Retrieve a list of repositories for a given project.
-- **repo_list_pull_requests_by_repo**: Retrieve a list of pull requests for a given repository.
-- **repo_list_pull_requests_by_project**: Retrieve a list of pull requests for a given project ID or name.
+- **repo_list_pull_requests_by_repo_or_project**: Retrieve a list of pull requests for a given repository or project.
 - **repo_list_branches_by_repo**: Retrieve a list of branches for a given repository.
 - **repo_list_my_branches_by_repo**: Retrieve a list of your branches for a given repository ID.
 - **repo_list_pull_requests_by_commits**: List pull requests associated with commits.
@@ -123,6 +122,7 @@ Interact with these Azure DevOps services:
 
 - **testplan_create_test_plan**: Create a new test plan in the project.
 - **testplan_create_test_case**: Create a new test case work item.
+- **testplan_update_test_case_steps**: Update an existing test case work item's steps.
 - **testplan_add_test_cases_to_suite**: Add existing test cases to a test suite.
 - **testplan_list_test_plans**: Retrieve a paginated list of test plans from an Azure DevOps project. Allows filtering for active plans and toggling detailed information.
 - **testplan_list_test_cases**: Get a list of test cases in the test plan.
