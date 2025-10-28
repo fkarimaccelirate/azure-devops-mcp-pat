@@ -11,6 +11,7 @@ import { IdentityBase } from "azure-devops-node-api/interfaces/IdentitiesInterfa
 
 const CORE_TOOLS = {
   list_project_teams: "core_list_project_teams",
+  list_team_members: "core_list_team_members",
   list_projects: "core_list_projects",
   get_identity_ids: "core_get_identity_ids",
 };
@@ -48,6 +49,88 @@ function configureCoreTools(server: McpServer, tokenProvider: () => Promise<stri
 
         return {
           content: [{ type: "text", text: `Error fetching project teams: ${errorMessage}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    CORE_TOOLS.list_team_members,
+    "Retrieve a list of members for the specified Azure DevOps team.",
+    {
+      project: z.string().describe("The name or ID of the Azure DevOps project."),
+      team: z.string().describe("The name or ID of the Azure DevOps team."),
+    },
+    async ({ project, team }) => {
+      try {
+        const connection = await connectionProvider();
+        const coreApi = await connection.getCoreApi();
+        const teamMembers = await coreApi.getTeamMembersWithExtendedProperties(project, team);
+
+        if (!teamMembers || teamMembers.length === 0) {
+          return { content: [{ type: "text", text: "No team members found" }], isError: true };
+        }
+
+        const identityCache = new Map<string, IdentityBase | null>();
+        const enrichIdentity = async (lookup: string | undefined, identityId?: string) => {
+          if (!lookup) return null;
+          if (identityCache.has(lookup)) return identityCache.get(lookup) ?? null;
+
+          try {
+            const identities = await searchIdentities(lookup, tokenProvider, connectionProvider, userAgentProvider);
+            const match =
+              identities.value?.find((candidate) => {
+                const properties = candidate.properties as Record<string, unknown> | undefined;
+                const accountProperty = typeof properties?.["Account"] === "string" ? (properties?.["Account"] as string) : undefined;
+                const mailProperty = typeof properties?.["Mail"] === "string" ? (properties?.["Mail"] as string) : undefined;
+
+                return candidate.id === identityId || candidate.providerDisplayName === lookup || accountProperty === lookup || mailProperty === lookup;
+              }) ?? identities.value?.[0];
+            identityCache.set(lookup, match ?? null);
+            return match ?? null;
+          } catch {
+            identityCache.set(lookup, null);
+            return null;
+          }
+        };
+
+        const normalizedMembers = [];
+        for (const member of teamMembers) {
+          const identity = member.identity;
+          let enriched: IdentityBase | null = null;
+
+          const needsFallback = !identity?.uniqueName || !identity?.descriptor || !identity?.id;
+          if (needsFallback) {
+            const lookupKey = identity?.uniqueName || identity?.displayName || identity?.id;
+            enriched = await enrichIdentity(lookupKey, identity?.id);
+          }
+
+          const fallbackProperties = enriched?.properties as Record<string, unknown> | undefined;
+          const fallbackUniqueName =
+            fallbackProperties && typeof fallbackProperties === "object"
+              ? (typeof fallbackProperties?.["Account"] === "string" ? (fallbackProperties?.["Account"] as string) : undefined) ??
+                (typeof fallbackProperties?.["Mail"] === "string" ? (fallbackProperties?.["Mail"] as string) : undefined)
+              : undefined;
+
+          normalizedMembers.push({
+            id: identity?.id ?? enriched?.id ?? null,
+            descriptor: identity?.descriptor ?? enriched?.descriptor ?? null,
+            displayName: identity?.displayName ?? enriched?.providerDisplayName ?? "",
+            uniqueName: identity?.uniqueName ?? fallbackUniqueName ?? undefined,
+            providerDisplayName: enriched?.providerDisplayName ?? identity?.displayName ?? "",
+            isTeamAdministrator: member.isTeamAdmin ?? false,
+          });
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(normalizedMembers, null, 2) }],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
+        return {
+          content: [{ type: "text", text: `Error fetching team members: ${errorMessage}` }],
           isError: true,
         };
       }

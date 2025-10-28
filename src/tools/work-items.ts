@@ -3,7 +3,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebApi } from "azure-devops-node-api";
-import { WorkItemExpand, WorkItemRelation } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
+import { WorkItemBatchGetRequest, WorkItemExpand, WorkItemRelation } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import { QueryExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import { z } from "zod";
 import { batchApiVersion, markdownCommentsApiVersion, getEnumKeys, safeEnumConvert, encodeFormattedValue } from "../utils.js";
@@ -12,6 +12,7 @@ const WORKITEM_TOOLS = {
   my_work_items: "wit_my_work_items",
   list_backlogs: "wit_list_backlogs",
   list_backlog_work_items: "wit_list_backlog_work_items",
+  list_project_work_items: "wit_list_project_work_items",
   get_work_item: "wit_get_work_item",
   get_work_items_batch_by_ids: "wit_get_work_items_batch_by_ids",
   update_work_item: "wit_update_work_item",
@@ -98,6 +99,153 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
 
       return {
         content: [{ type: "text", text: JSON.stringify(workItems, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    WORKITEM_TOOLS.list_project_work_items,
+    "Retrieve all work items for a project using a WIQL query with optional filters.",
+    {
+      project: z.string().describe("The name or ID of the Azure DevOps project."),
+      fields: z
+        .array(z.string())
+        .optional()
+        .describe("Optional list of fields to include in the response. Defaults to common fields like Id, Title, State, AssignedTo, WorkItemType, Tags, AreaPath, and IterationPath."),
+      workItemTypes: z.array(z.string()).optional().describe("Optional list of work item types to include."),
+      states: z.array(z.string()).optional().describe("Optional list of work item states to include."),
+      areaPaths: z.array(z.string()).optional().describe("Optional list of area paths to filter on."),
+      iterationPaths: z.array(z.string()).optional().describe("Optional list of iteration paths to filter on."),
+      tags: z.array(z.string()).optional().describe("Optional list of tags. Work items must contain at least one matching tag."),
+      assignedTo: z.array(z.string()).optional().describe("Optional list of identities to filter by assigned to (display name or email)."),
+      createdAfter: z.coerce.date().optional().describe("Optional created date lower-bound (inclusive)."),
+      createdBefore: z.coerce.date().optional().describe("Optional created date upper-bound (inclusive)."),
+      changedAfter: z.coerce.date().optional().describe("Optional changed date lower-bound (inclusive)."),
+      changedBefore: z.coerce.date().optional().describe("Optional changed date upper-bound (inclusive)."),
+      maxItems: z.number().int().positive().optional().describe("Optional hard limit on total work items to return. If not provided, all matching work items are returned."),
+      pageSize: z
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("Optional page size for WIQL paging. Defaults to 200 which is the maximum supported by the API."),
+      expand: z.enum(getEnumKeys(WorkItemExpand) as [string, ...string[]]).optional().describe("Optional expand parameter to include additional details in the response. Defaults to 'None'."),
+    },
+    async ({
+      project,
+      fields,
+      workItemTypes,
+      states,
+      areaPaths,
+      iterationPaths,
+      tags,
+      assignedTo,
+      createdAfter,
+      createdBefore,
+      changedAfter,
+      changedBefore,
+      maxItems,
+      pageSize,
+      expand,
+    }) => {
+      const connection = await connectionProvider();
+      const workItemApi = await connection.getWorkItemTrackingApi();
+
+      const defaultFields = ["System.Id", "System.Title", "System.State", "System.WorkItemType", "System.AssignedTo", "System.Tags", "System.AreaPath", "System.IterationPath"];
+      const fieldsToUse = !fields || fields.length === 0 ? defaultFields : fields;
+      const expandOption = safeEnumConvert(WorkItemExpand, expand);
+      const requestedPageSize = pageSize ?? 200;
+      const effectivePageSize = Math.min(requestedPageSize, 200);
+      const teamContext = { project };
+      const limit = maxItems ?? Number.POSITIVE_INFINITY;
+
+      const escapeValue = (value: string) => value.replace(/'/g, "''");
+      const buildInClause = (field: string, values?: string[]) => {
+        if (!values || values.length === 0) return undefined;
+        return `${field} IN (${values.map((value) => `'${escapeValue(value)}'`).join(", ")})`;
+      };
+
+      const formatDate = (value?: Date) => (value ? value.toISOString() : undefined);
+      const whereClauses: string[] = ["[System.TeamProject] = @project"];
+
+      const typeClause = buildInClause("[System.WorkItemType]", workItemTypes);
+      if (typeClause) whereClauses.push(typeClause);
+
+      const stateClause = buildInClause("[System.State]", states);
+      if (stateClause) whereClauses.push(stateClause);
+
+      const areaClause = buildInClause("[System.AreaPath]", areaPaths);
+      if (areaClause) whereClauses.push(areaClause);
+
+      const iterationClause = buildInClause("[System.IterationPath]", iterationPaths);
+      if (iterationClause) whereClauses.push(iterationClause);
+
+      if (assignedTo && assignedTo.length > 0) {
+        whereClauses.push(`[System.AssignedTo] IN (${assignedTo.map((value) => `'${escapeValue(value)}'`).join(", ")})`);
+      }
+
+      if (tags && tags.length > 0) {
+        const tagClauses = tags.map((tag) => `[System.Tags] CONTAINS '${escapeValue(tag)}'`);
+        whereClauses.push(`(${tagClauses.join(" OR ")})`);
+      }
+
+      const createdAfterValue = formatDate(createdAfter);
+      if (createdAfterValue) whereClauses.push(`[System.CreatedDate] >= '${createdAfterValue}'`);
+
+      const createdBeforeValue = formatDate(createdBefore);
+      if (createdBeforeValue) whereClauses.push(`[System.CreatedDate] <= '${createdBeforeValue}'`);
+
+      const changedAfterValue = formatDate(changedAfter);
+      if (changedAfterValue) whereClauses.push(`[System.ChangedDate] >= '${changedAfterValue}'`);
+
+      const changedBeforeValue = formatDate(changedBefore);
+      if (changedBeforeValue) whereClauses.push(`[System.ChangedDate] <= '${changedBeforeValue}'`);
+
+      const filtersClause = whereClauses.join(" AND ");
+      const results: unknown[] = [];
+      let lastId = 0;
+
+      while (results.length < limit) {
+        const remaining = limit === Number.POSITIVE_INFINITY ? effectivePageSize : Math.min(effectivePageSize, limit - results.length);
+        const pagingClause = lastId > 0 ? ` AND [System.Id] > ${lastId}` : "";
+        const wiqlQuery = `SELECT [System.Id] FROM WorkItems WHERE ${filtersClause}${pagingClause} ORDER BY [System.Id] ASC`;
+
+        const wiqlResult = await workItemApi.queryByWiql({ query: wiqlQuery }, teamContext, false, remaining);
+        let ids = (wiqlResult.workItems ?? []).map((item) => item.id).filter((id): id is number => typeof id === "number");
+
+        if (!ids || ids.length === 0) {
+          break;
+        }
+
+        if (limit !== Number.POSITIVE_INFINITY) {
+          const allowed = limit - results.length;
+          ids = ids.slice(0, allowed);
+        }
+
+        const batchRequest: WorkItemBatchGetRequest = {
+          ids,
+          fields: fieldsToUse,
+        };
+
+        if (expandOption !== undefined) {
+          batchRequest.$expand = expandOption;
+        }
+
+        const batch = await workItemApi.getWorkItemsBatch(batchRequest, project);
+        if (batch && batch.length > 0) {
+          results.push(...batch);
+        }
+
+        lastId = ids[ids.length - 1];
+
+        if (ids.length < remaining) {
+          break;
+        }
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
       };
     }
   );
@@ -375,7 +523,23 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to update work items in batch: ${response.statusText}`);
+          const baseMessage = `Failed to update work items in batch: ${response.statusText}`;
+          let errorPayload = "";
+
+          if (typeof response.text === "function") {
+            try {
+              errorPayload = (await response.text()) ?? "";
+            } catch {
+              errorPayload = "";
+            }
+          }
+
+          const errorDetails = errorPayload && errorPayload.trim().length > 0 ? `${baseMessage} - ${errorPayload}` : baseMessage;
+
+          return {
+            content: [{ type: "text", text: `Error creating child work items: ${errorDetails}` }],
+            isError: true,
+          };
         }
 
         const result = await response.json();
@@ -819,7 +983,7 @@ function configureWorkItemTools(server: McpServer, tokenProvider: () => Promise<
         const relations: WorkItemRelation[] = workItem.relations ?? [];
         const linkType = getLinkTypeFromName(type);
 
-        let relationIndexes: number[] = [];
+        let relationIndexes: number[];
 
         if (url && url.trim().length > 0) {
           // If url is provided, find relations matching both rel type and url
